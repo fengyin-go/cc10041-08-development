@@ -79,5 +79,34 @@ npm run dev
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
 
+## 分区覆盖清单与历史回填
+
+数据分区除了登记和启停，还提供「按回填日期范围查询分区覆盖清单」的入口。
+同一个日期可能同时命中日分区和包含它的月归档，两份都可能是已核准版本；
+清单按「日分区优先」为每一天确定唯一读取来源，并把未覆盖日期单独列出。
+
+```bash
+# 查 4 日到 9 日的订单覆盖清单（8、9 日未覆盖）
+curl "http://127.0.0.1:8016/api/partitions/coverage?dataset=订单&start=2026-11-04&end=2026-11-09"
+
+# 用覆盖清单准备回填计划（相同范围重复提交会复用原计划）
+curl -X POST "http://127.0.0.1:8016/api/partitions/backfill-plans?dataset=订单&start=2026-11-04&end=2026-11-07"
+
+# 执行 / 续做，limit=1 表示本次只处理一个未确认日期
+curl -X POST "http://127.0.0.1:8016/api/partitions/backfill-plans/<plan_id>/run?limit=1"
+
+# 核对：已确认、尚待处理、实际不可读的来源和逐日实际版本
+curl "http://127.0.0.1:8016/api/partitions/backfill-plans/<plan_id>"
+```
+
+计划在创建时冻结每天的来源分区和版本，续做只认这份清单：已确认日期不会重复
+写入，来源被停用时记为「不可读」而不是回退到另一份数据，恢复后再续做即可补完。
+入口文件：`backend/app/engine/partition_coverage.py`、`backend/app/routers/partition.py`，
+前端在「数据分区」页（`frontend/src/views/DataPartitionView.vue`）。
+
+「数据分区」页在原有登记/启停表格下新增了覆盖清单面板：输入数据集和日期范围
+即可看到每天的候选已核准来源、本次计划读取的版本和金额、未覆盖日期；
+「准备回填计划」把清单冻结成计划，「先跑一天 / 执行 / 续做」按计划逐日写入。
+
 领域：数据工程
 子方向：数仓与数据湖

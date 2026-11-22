@@ -1,6 +1,6 @@
-"""业务路由汇总：所有模块共用一套资源路由，由领域服务完成分派。"""
+"""业务路由汇总：固定前缀的管道/分区路由放在通用资源路由之前，避免被 /api/{module}/{id} 抢先匹配。"""
 from __future__ import annotations
 
-from app.routers import resource, pipeline
+from app.routers import resource, pipeline, partition
 
-ROUTERS = [resource, pipeline]
+ROUTERS = [partition, pipeline, resource]
